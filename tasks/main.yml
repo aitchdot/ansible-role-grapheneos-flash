@@ -1,0 +1,59 @@
+---
+- include_tasks: install_dependencies.yml
+
+- name: "Remove PowerShell legacy curl alias (Windows)"
+  win_shell: Remove-Item Alias:Curl
+  when: ansible_os_family == "Windows"
+
+- name: "List connected devices"
+  shell: adb devices | grep -w device | grep -v devices | awk '{print $1}'
+  register: connected_devices
+  changed_when: false
+
+- name: "Download GrapheneOS if path not provided"
+  include_tasks: download_grapheneos.yml
+  when: grapheneos_image_path == ""
+
+- name: "Ensure devices are in bootloader mode"
+  shell: adb -s {{ item }} reboot bootloader
+  loop: "{{ connected_devices.stdout_lines }}"
+  async: 45
+  poll: 0
+  ignore_errors: yes
+  changed_when: false
+
+- name: "Wait for devices to enter bootloader mode"
+  pause:
+    seconds: 10
+
+- name: "Unlock bootloader"
+  shell: fastboot -s {{ item }} flashing unlock
+  loop: "{{ connected_devices.stdout_lines }}"
+  ignore_errors: yes
+
+- name: "Flash GrapheneOS"
+  shell: |
+    cd {{ grapheneos_image_path }}
+    fastboot -s {{ item }} flash-all.sh
+  loop: "{{ connected_devices.stdout_lines }}"
+  async: 300
+  poll: 0
+
+- name: "Wait for flashing process to complete"
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 60
+  delay: 10
+  loop: "{{ ansible_job_result.results }}"
+  when: item.ansible_job_id is defined
+
+- name: "Relock bootloader (optional)"
+  shell: fastboot -s {{ item }} flashing lock
+  loop: "{{ connected_devices.stdout_lines }}"
+  ignore_errors: yes
+
+- name: "Reboot devices"
+  shell: fastboot -s {{ item }} reboot
+  loop: "{{ connected_devices.stdout_lines }}"

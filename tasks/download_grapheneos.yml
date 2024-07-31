@@ -1,0 +1,31 @@
+---
+- name: "Create temporary directory for GrapheneOS download"
+  tempfile:
+    state: directory
+    suffix: grapheneos
+  register: grapheneos_tempdir
+
+- name: "Download the latest GrapheneOS release page"
+  get_url:
+    url: "{{ grapheneos_download_url }}"
+    dest: "{{ grapheneos_tempdir.path }}/releases.html"
+
+- name: "Extract download link for the latest GrapheneOS image"
+  command: grep -oP '(?<=href=")[^"]*{{ grapheneos_device }}-factory-.*\.zip(?=")' {{ grapheneos_tempdir.path }}/releases.html
+  register: grapheneos_download_link
+  changed_when: false
+
+- name: "Download the latest GrapheneOS image"
+  get_url:
+    url: "https://releases.grapheneos.org/{{ grapheneos_download_link.stdout }}"
+    dest: "{{ grapheneos_tempdir.path }}/grapheneos.zip"
+
+- name: "Extract the GrapheneOS image"
+  unarchive:
+    src: "{{ grapheneos_tempdir.path }}/grapheneos.zip"
+    dest: "{{ grapheneos_tempdir.path }}"
+    remote_src: yes
+
+- name: "Set the extracted image path"
+  set_fact:
+    grapheneos_image_path: "{{ grapheneos_tempdir.path }}/{{ grapheneos_download_link.stdout | basename | regex_replace('\\.zip$', '') }}"

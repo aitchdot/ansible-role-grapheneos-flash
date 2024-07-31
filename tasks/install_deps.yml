@@ -1,0 +1,28 @@
+---
+- name: "Ensure dependencies are installed (Debian-based)"
+  apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - unzip
+    - android-tools-fastboot
+    - android-sdk-platform-tools-common
+  when: ansible_os_family == "Debian"
+
+- name: "Ensure dependencies are installed (Windows)"
+  win_chocolatey:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - unzip
+    - adb
+    - fastboot
+  when: ansible_os_family == "Windows"
+
+- name: "Stop fwupd service on Debian-based systems to avoid issues with fastboot"
+  service:
+    name: fwupd
+    state: stopped
+  when: ansible_os_family == "Debian"
